@@ -1,7 +1,9 @@
-version: "3"
+version: "3.7"
+
 services:
   odoo:
-    image: odoo:12.0
+    image: pfplus/odoo:latest
+    container_name: odoo13
     depends_on:
       - db
     restart: unless-stopped
@@ -12,33 +14,40 @@ services:
       - USER=${ODOO_USER}
       - PASSWORD=${ODOO_PASS}
     volumes:
-      - ./odoo/odoo-web-data:/var/lib/odoo
+      - odoo-data:/var/lib/odoo
+      - odoo-extra-addons:/mnt/extra-addons
       - ./odoo/config:/etc/odoo
-      - ./odoo/addons:/mnt/extra-addons
       - ./odoo/logs:/var/log/odoo
     labels:
-      - 'traefik.http.routers.odoo.rule=Host(`${ODOO_TRAEFIK_URL}`)'
-      - 'traefik.http.routers.odoo.entrypoints=websecure'
-      - 'traefik.http.routers.odoo.tls.certresolver=odoo'
+      - "traefik.http.routers.odoo.rule=Host(`${ODOO_TRAEFIK_URL}`)"
+      - "traefik.http.routers.odoo.entrypoints=websecure"
+      - "traefik.http.routers.odoo.tls.certresolver=odoo"
       - "traefik.http.services.odoo.loadbalancer.server.port=8069"
       - "traefik.http.routers.http-catchall.rule=hostregexp(`{host:.+}`)"
       - "traefik.http.routers.http-catchall.entrypoints=web"
       - "traefik.http.routers.http-catchall.middlewares=redirect-to-https@docker"
       - "traefik.http.middlewares.redirect-to-https.redirectscheme.scheme=https"
+
   db:
-    image: postgres:10
+    image: postgres:latest
+    container_name: db
     restart: unless-stopped
     networks:
       - internal
+    ports:
+      - "5432:5432"
     environment:
       - POSTGRES_DB=postgres
       - POSTGRES_USER=${ODOO_USER}
       - POSTGRES_PASSWORD=${ODOO_PASS}
       - PGDATA=/var/lib/postgresql/data/pgdata
     volumes:
-      - ./pgdata:/var/lib/postgresql/data/pgdata
+      - db-data:/var/lib/postgresql/data/pgdata
+
   traefik:
-    image: traefik:v2.0
+    image: traefik
+    container_name: traefik
+    restart: unless-stopped
     networks:
       - internal
       - web
@@ -53,18 +62,23 @@ services:
       - "./traefik/traefik.yml:/etc/traefik.yml"
       - "/var/run/docker.sock:/var/run/docker.sock"
     command:
-     - "--log.level=DEBUG"
-     - "--api.insecure=true"
-     - "--providers.docker"
-     - "--providers.docker.defaultRule=Host(`{{ trimPrefix `/` .Name }}.${TRAEFIK_DEFAULT_DOMAIN}`)"
-     - "--entryPoints.web.address=:80"
-     - "--entryPoints.websecure.address=:443"
-     - "--certificatesResolvers.odoo.acme.httpchallenge=true"
-     - "--certificatesresolvers.odoo.acme.httpchallenge.entrypoint=web"
-     - "--certificatesresolvers.odoo.acme.email=${ACME_EMAIL}"
-     - "--certificatesresolvers.odoo.acme.storage=/letsencrypt/acme.json"
+            #      - "--log.level=DEBUG"
+      - "--api.insecure=true"
+      - "--providers.docker"
+      - "--providers.docker.defaultRule=Host(`{{ trimPrefix `/` .Name }}.${TRAEFIK_DEFAULT_DOMAIN}`)"
+      - "--entryPoints.web.address=:80"
+      - "--entryPoints.websecure.address=:443"
+      - "--certificatesResolvers.odoo.acme.httpchallenge=true"
+      - "--certificatesresolvers.odoo.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.odoo.acme.email=${ACME_EMAIL}"
+      - "--certificatesresolvers.odoo.acme.storage=/letsencrypt/acme.json"
 
 networks:
   internal:
   web:
       external: true
+
+volumes: 
+  db-data:
+  odoo-data:
+  odoo-extra-addons:
